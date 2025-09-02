@@ -287,7 +287,7 @@ impl ClamdClientBuilder {
     }
 
     /// Set the chunk size for file streaming. Default is [`DEFAULT_CHUNK_SIZE`].
-    pub fn chunk_size(mut self, chunk_size: usize) -> Self {
+    pub fn chunk_size(&mut self, chunk_size: usize) -> &mut Self {
         self.chunk_size = chunk_size;
         self
     }
@@ -295,7 +295,7 @@ impl ClamdClientBuilder {
     /// Creates a clamd IDSESSION that stays alive until
     /// [`ClamdRequestMessage::EndSession`] is sent.
     /// If `tcp_socket`, sets the underlying socket in keep alive mode.
-    pub fn keep_alive(mut self, keep_alive: bool) -> Self {
+    pub fn keep_alive(&mut self, keep_alive: bool) -> &mut Self {
         if keep_alive {
             self.connection_type = ConnectionType::KeepAlive;
         } else {
@@ -305,14 +305,14 @@ impl ClamdClientBuilder {
     }
 
     /// Set a regex pattern to exclude matching virus signatures from being reported.
-    pub fn exclude_signature(mut self, pattern: &str) -> Result<Self> {
+    pub fn exclude_signature(&mut self, pattern: &str) -> Result<&mut Self> {
         let re = Regex::new(pattern)?;
         self.excluded_signatures.push(re);
         Ok(self)
     }
 
     /// Set a list of regex patterns to exclude matching virus signatures from being reported.
-    pub fn exclude_signatures(mut self, patterns: &[String]) -> Result<Self> {
+    pub fn exclude_signatures(&mut self, patterns: &[String]) -> Result<&mut Self> {
         for pattern in patterns {
             let re = Regex::new(pattern)?;
             self.excluded_signatures.push(re);
@@ -321,14 +321,14 @@ impl ClamdClientBuilder {
     }
 
     /// Create [`ClamdClient`] with provided configuration.
-    pub fn build(self) -> ClamdClient {
+    pub fn build(&self) -> ClamdClient {
         ClamdClient {
             chunk_size: self.chunk_size,
             connection_type: self.connection_type,
-            excluded_signatures: self.excluded_signatures,
-            socket_type: match self.socket_type {
-                SocketTypeBuilder::Tcp(t) => SocketType::Tcp(t),
-                SocketTypeBuilder::Unix(u) => SocketType::Unix(u),
+            excluded_signatures: self.excluded_signatures.clone(),
+            socket_type: match &self.socket_type {
+                SocketTypeBuilder::Tcp(t) => SocketType::Tcp(t.to_owned()),
+                SocketTypeBuilder::Unix(u) => SocketType::Unix(u.to_owned()),
             },
             state: Arc::new(Mutex::new(None)),
         }
