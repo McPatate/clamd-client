@@ -9,6 +9,7 @@
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use futures::SinkExt;
 use futures::StreamExt;
+use regex::Regex;
 use socket2::SockRef;
 use std::io::Cursor;
 use std::net::SocketAddr;
@@ -247,6 +248,7 @@ pub struct ClamdClientBuilder {
     socket_type: SocketTypeBuilder,
     connection_type: ConnectionType,
     chunk_size: usize,
+    excluded_signatures: Vec<Regex>,
 }
 
 impl ClamdClientBuilder {
@@ -267,6 +269,7 @@ impl ClamdClientBuilder {
             socket_type: SocketTypeBuilder::Unix(path.as_ref().to_path_buf()),
             connection_type: ConnectionType::Oneshot,
             chunk_size: DEFAULT_CHUNK_SIZE,
+            excluded_signatures: vec![],
         }
     }
     /// Build a [`ClamdClient`] from the socket address to the tcp socket of `clamd`.
@@ -279,11 +282,12 @@ impl ClamdClientBuilder {
             socket_type: SocketTypeBuilder::Tcp(addr[0]), // Not sure if this is safe or not
             connection_type: ConnectionType::Oneshot,
             chunk_size: DEFAULT_CHUNK_SIZE,
+            excluded_signatures: vec![],
         })
     }
 
     /// Set the chunk size for file streaming. Default is [`DEFAULT_CHUNK_SIZE`].
-    pub fn chunk_size(&mut self, chunk_size: usize) -> &mut Self {
+    pub fn chunk_size(mut self, chunk_size: usize) -> Self {
         self.chunk_size = chunk_size;
         self
     }
@@ -291,7 +295,7 @@ impl ClamdClientBuilder {
     /// Creates a clamd IDSESSION that stays alive until
     /// [`ClamdRequestMessage::EndSession`] is sent.
     /// If `tcp_socket`, sets the underlying socket in keep alive mode.
-    pub fn keep_alive(&mut self, keep_alive: bool) -> &mut Self {
+    pub fn keep_alive(mut self, keep_alive: bool) -> Self {
         if keep_alive {
             self.connection_type = ConnectionType::KeepAlive;
         } else {
@@ -300,14 +304,23 @@ impl ClamdClientBuilder {
         self
     }
 
+    /// Set a regex pattern to exclude certain virus signatures from being reported.
+    /// You can add multiple patterns by calling this method multiple times.
+    pub fn exclude_signature(mut self, pattern: &str) -> Result<Self> {
+        let re = Regex::new(pattern)?;
+        self.excluded_signatures.push(re);
+        Ok(self)
+    }
+
     /// Create [`ClamdClient`] with provided configuration.
-    pub fn build(&self) -> ClamdClient {
+    pub fn build(self) -> ClamdClient {
         ClamdClient {
             chunk_size: self.chunk_size,
             connection_type: self.connection_type,
-            socket_type: match &self.socket_type {
-                SocketTypeBuilder::Tcp(t) => SocketType::Tcp(t.to_owned()),
-                SocketTypeBuilder::Unix(u) => SocketType::Unix(u.to_owned()),
+            excluded_signatures: self.excluded_signatures,
+            socket_type: match self.socket_type {
+                SocketTypeBuilder::Tcp(t) => SocketType::Tcp(t),
+                SocketTypeBuilder::Unix(u) => SocketType::Unix(u),
             },
             state: Arc::new(Mutex::new(None)),
         }
@@ -320,7 +333,7 @@ pub enum ScanResult {
 }
 
 impl ScanResult {
-    pub(crate) fn from_output(out: &str) -> Result<Self> {
+    pub(crate) fn from_output(out: &str, excluded_signatures: &[Regex]) -> Result<Self> {
         let mut infection_types: Vec<String> = Vec::new();
         let results = out.split_terminator('\0');
         for raw_result in results {
@@ -339,6 +352,11 @@ impl ScanResult {
                 infection_types.push(result.replace(" FOUND", ""));
             }
         }
+        infection_types.retain(|inf| {
+            !excluded_signatures
+                .iter()
+                .any(|re| re.is_match(inf.as_str()))
+        });
         if infection_types.is_empty() {
             Ok(ScanResult::Benign)
         } else {
@@ -369,6 +387,7 @@ impl ScanResult {
 pub struct ClamdClient {
     chunk_size: usize,
     connection_type: ConnectionType,
+    excluded_signatures: Vec<Regex>,
     socket_type: SocketType,
     state: Arc<Mutex<Option<ConnectedSocket>>>,
 }
@@ -567,7 +586,7 @@ impl ClamdClient {
         trace!("Hit EOF, closing stream to clamd");
         sock.send(ClamdRequestMessage::EndStream).await?;
         if let Some(s) = sock.next().await.transpose()? {
-            Ok(ScanResult::from_output(&s)?)
+            Ok(ScanResult::from_output(&s, &self.excluded_signatures)?)
         } else {
             Err(ClamdError::NoResponse)
         }
@@ -608,7 +627,7 @@ impl ClamdClient {
             res += &s;
             res += "\0";
         }
-        ScanResult::from_output(&res)
+        ScanResult::from_output(&res, &self.excluded_signatures)
     }
 
     pub async fn multi_scan(&mut self, path_to_scan: &impl AsRef<Path>) -> Result<ScanResult> {
@@ -620,7 +639,7 @@ impl ClamdClient {
         let sock = framed.get_socket();
         sock.send(ClamdRequestMessage::MultiScan(path)).await?;
         if let Some(res) = sock.next().await.transpose()? {
-            Ok(ScanResult::from_output(&res)?)
+            Ok(ScanResult::from_output(&res, &self.excluded_signatures)?)
         } else {
             Err(ClamdError::NoResponse)
         }
@@ -716,7 +735,7 @@ NotifyClamd clamd.conf
             if String::from_utf8(pong.stdout).unwrap() != "PONG\0" {
                 let path = std::env::current_dir().unwrap();
                 let current_dir = path.to_str().unwrap();
-                Command::new("/usr/local/clamav/sbin/clamd").arg("-c").arg("clamd.conf").arg("-l").arg("clamd.log").status().unwrap();
+                Command::new("/usr/local/clamav/sbin/clamd").arg("-c").arg("clamd.conf").arg("-l").arg(format!("{current_dir}/clamd.log")).status().unwrap();
             }
         });
     }
@@ -953,6 +972,22 @@ NotifyClamd clamd.conf
         let res = clamd_client.all_match_scan(&file_path).await?;
         assert!(matches!(res, ScanResult::Benign));
         tokio::fs::remove_file(file_path).await?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    #[traced_test]
+    async fn test_signature_exclusion() -> eyre::Result<()> {
+        setup_clamav();
+        let eicar_bytes = reqwest::get("https://secure.eicar.org/eicarcom2.zip")
+            .await?
+            .bytes()
+            .await?;
+        let mut clamd_client = ClamdClientBuilder::tcp_socket(TCP_ADDRESS)?
+            .exclude_signature("Win\\.*")?
+            .build();
+        let res = clamd_client.scan_bytes(&eicar_bytes).await?;
+        assert!(matches!(res, ScanResult::Benign));
         Ok(())
     }
 }

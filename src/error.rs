@@ -45,6 +45,8 @@ pub enum ClamdError {
     /// is somehow malformed. Contains the invalid response.
     #[error("incomplete response from clamd: {0}")]
     IncompleteResponse(String),
+    #[error("regex error: {0}")]
+    RegexError(#[from] regex::Error),
     #[error("unsupported feature: path must point to file")]
     UnsupportedFeature,
 }
