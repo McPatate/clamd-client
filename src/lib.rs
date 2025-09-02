@@ -304,11 +304,19 @@ impl ClamdClientBuilder {
         self
     }
 
-    /// Set a regex pattern to exclude certain virus signatures from being reported.
-    /// You can add multiple patterns by calling this method multiple times.
+    /// Set a regex pattern to exclude matching virus signatures from being reported.
     pub fn exclude_signature(mut self, pattern: &str) -> Result<Self> {
         let re = Regex::new(pattern)?;
         self.excluded_signatures.push(re);
+        Ok(self)
+    }
+
+    /// Set a list of regex patterns to exclude matching virus signatures from being reported.
+    pub fn exclude_signatures(mut self, patterns: &[String]) -> Result<Self> {
+        for pattern in patterns {
+            let re = Regex::new(pattern)?;
+            self.excluded_signatures.push(re);
+        }
         Ok(self)
     }
 
