@@ -376,7 +376,7 @@ type ConnectedSocket = Option<Framed<SocketWrapper, ClamdZeroDelimitedCodec>>;
 
 impl ClamdClient {
     async fn connect(
-        &mut self,
+        &self,
     ) -> Result<MappedMutexGuard<'_, Framed<SocketWrapper, ClamdZeroDelimitedCodec>>> {
         let codec = ClamdZeroDelimitedCodec::new();
         let mut guard = MutexGuard::map(self.shared.state.lock().await, |s| s);
@@ -432,7 +432,7 @@ impl ClamdClient {
 
     /// Ping clamd. If it responds normally (with `PONG`) this function returns `Ok(())`, otherwise
     /// returns with error.
-    pub async fn ping(&mut self) -> Result<()> {
+    pub async fn ping(&self) -> Result<()> {
         let mut sock = self.connect().await?;
         sock.send(ClamdRequestMessage::Ping).await?;
         trace!("Sent ping to clamd");
@@ -449,7 +449,7 @@ impl ClamdClient {
     }
 
     /// Get `clamd` version string.
-    pub async fn version(&mut self) -> Result<String> {
+    pub async fn version(&self) -> Result<String> {
         let mut sock = self.connect().await?;
         sock.send(ClamdRequestMessage::Version).await?;
         trace!("Sent version request to clamd");
@@ -463,7 +463,7 @@ impl ClamdClient {
     }
 
     /// Reload `clamd`.
-    pub async fn reload(&mut self) -> Result<()> {
+    pub async fn reload(&self) -> Result<()> {
         let mut sock = self.connect().await?;
         sock.send(ClamdRequestMessage::Reload).await?;
         trace!("Sent reload request to clamd");
@@ -484,7 +484,7 @@ impl ClamdClient {
     }
 
     /// Get `clamd` stats.
-    pub async fn stats(&mut self) -> Result<String> {
+    pub async fn stats(&self) -> Result<String> {
         let mut sock = self.connect().await?;
         sock.send(ClamdRequestMessage::Stats).await?;
         trace!("Sent stats request to clamd");
@@ -502,7 +502,7 @@ impl ClamdClient {
     }
 
     /// Shutdown clamd. Careful: There is no way to start clamd again from this library.
-    pub async fn shutdown(mut self) -> Result<()> {
+    pub async fn shutdown(self) -> Result<()> {
         let mut sock = self.connect().await?;
         trace!("Sent shutdown request to clamd");
         sock.send(ClamdRequestMessage::Shutdown).await?;
@@ -521,10 +521,7 @@ impl ClamdClient {
     /// but seems to have found a virus signature this returns
     /// [`ClamdError::ScanError`] with the scan result. See [`ClamdError`] for more
     /// information.
-    pub async fn scan_reader<R: AsyncRead + AsyncReadExt + Unpin>(
-        &mut self,
-        mut to_scan: R,
-    ) -> Result<ScanResult> {
+    pub async fn scan_reader<R: AsyncReadExt + Unpin>(&self, mut to_scan: R) -> Result<ScanResult> {
         let mut buf = BytesMut::with_capacity(self.shared.chunk_size);
         let mut sock = self.connect().await?;
 
@@ -547,7 +544,7 @@ impl ClamdClient {
 
     /// Convienence method to scan a bytes slice. Wraps [`ClamdClient::scan_reader`], so see there
     /// for more information.
-    pub async fn scan_bytes(&mut self, to_scan: &[u8]) -> Result<ScanResult> {
+    pub async fn scan_bytes(&self, to_scan: &[u8]) -> Result<ScanResult> {
         let cursor = Cursor::new(to_scan);
         self.scan_reader(cursor).await
     }
@@ -555,12 +552,12 @@ impl ClamdClient {
     /// Convienence method to directly scan a file under the given
     /// path. This will read the file and stream it to clamd. Wraps
     /// [`ClamdClient::scan_reader`], so see there for more information.
-    pub async fn scan_file(&mut self, path_to_scan: impl AsRef<Path>) -> Result<ScanResult> {
+    pub async fn scan_file(&self, path_to_scan: impl AsRef<Path>) -> Result<ScanResult> {
         let reader = File::open(path_to_scan).await?;
         self.scan_reader(reader).await
     }
 
-    pub async fn end_session(&mut self) -> Result<()> {
+    pub async fn end_session(&self) -> Result<()> {
         let mut sock = self.connect().await?;
         sock.send(ClamdRequestMessage::EndSession).await?;
         Ok(())
