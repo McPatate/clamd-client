@@ -572,7 +572,7 @@ mod tests {
     use std::sync::Once;
     use tracing_test::traced_test;
 
-    const CLAMAV_VERSION: &str = "1.0.0";
+    const CLAMAV_VERSION: &str = "1.0.9";
     const TCP_ADDRESS: &str = "127.0.0.1:3310";
     const UNIX_SOCKET_PATH: &str = "clamd.sock";
     static INIT: Once = Once::new();
@@ -626,13 +626,13 @@ NotifyClamd clamd.conf
                 Ok(_) => (),
                 Err(_) => {
                     Command::new("wget")
-                        .arg(format!("https://www.clamav.net/downloads/production/clamav-{}.macos.universal.pkg", CLAMAV_VERSION))
+                        .arg(format!("https://www.clamav.net/downloads/production/clamav-{CLAMAV_VERSION}.macos.universal.pkg"))
                         .status()
                         .unwrap();
                     Command::new("sudo")
                         .arg("installer")
                         .arg("-pkg")
-                        .arg("clamav-1.0.0.macos.universal.pkg")
+                        .arg(format!("clamav-{CLAMAV_VERSION}.macos.universal.pkg"))
                         .arg("-target")
                         .arg("/")
                         .status()
@@ -664,13 +664,13 @@ NotifyClamd clamd.conf
                 Ok(_) => (),
                 Err(_) => {
                     Command::new("wget")
-                        .arg(format!("https://www.clamav.net/downloads/production/clamav-{}.linux.x86_64.deb", CLAMAV_VERSION))
+                        .arg(format!("https://www.clamav.net/downloads/production/clamav-{CLAMAV_VERSION}.linux.x86_64.deb"))
                         .status()
                         .unwrap();
                     Command::new("sudo")
                         .arg("dpkg")
                         .arg("-i")
-                        .arg("clamav-1.0.0.linux.x86_64.deb")
+                        .arg(format!("clamav-{CLAMAV_VERSION}.linux.x86_64.deb"))
                         .status()
                         .unwrap();
                     Command::new("sudo")
@@ -697,7 +697,7 @@ NotifyClamd clamd.conf
     #[traced_test]
     async fn tcp_common_operations() -> eyre::Result<()> {
         setup_clamav();
-        let mut clamd_client = ClamdClientBuilder::tcp_socket(TCP_ADDRESS)?.build();
+        let clamd_client = ClamdClientBuilder::tcp_socket(TCP_ADDRESS)?.build();
         clamd_client.ping().await?;
         let version = clamd_client.version().await?;
         assert!(!version.is_empty());
@@ -714,7 +714,7 @@ NotifyClamd clamd.conf
 
         let random_bytes: Vec<u8> = (0..NUM_BYTES).map(|_| rand::random::<u8>()).collect();
 
-        let mut clamd_client = ClamdClientBuilder::tcp_socket(TCP_ADDRESS)?.build();
+        let clamd_client = ClamdClientBuilder::tcp_socket(TCP_ADDRESS)?.build();
         let result = clamd_client.scan_bytes(&random_bytes).await?;
         assert!(matches!(result, ScanResult::Benign));
         Ok(())
@@ -729,7 +729,7 @@ NotifyClamd clamd.conf
             .bytes()
             .await?;
 
-        let mut clamd_client = ClamdClientBuilder::tcp_socket(TCP_ADDRESS)?.build();
+        let clamd_client = ClamdClientBuilder::tcp_socket(TCP_ADDRESS)?.build();
         let res = clamd_client.scan_bytes(&eicar_bytes).await?;
         match res {
             ScanResult::Benign => panic!("Malignent scan result expected"),
@@ -744,7 +744,7 @@ NotifyClamd clamd.conf
     #[traced_test]
     async fn tcp_reload() -> eyre::Result<()> {
         setup_clamav();
-        let mut clamd_client = ClamdClientBuilder::tcp_socket(TCP_ADDRESS)?.build();
+        let clamd_client = ClamdClientBuilder::tcp_socket(TCP_ADDRESS)?.build();
         clamd_client.reload().await?;
         Ok(())
     }
@@ -753,7 +753,7 @@ NotifyClamd clamd.conf
     #[traced_test]
     async fn unix_socket_common_operations() -> eyre::Result<()> {
         setup_clamav();
-        let mut clamd_client = ClamdClientBuilder::unix_socket(UNIX_SOCKET_PATH).build();
+        let clamd_client = ClamdClientBuilder::unix_socket(UNIX_SOCKET_PATH).build();
         clamd_client.ping().await?;
         let version = clamd_client.version().await?;
         assert!(!version.is_empty());
@@ -769,7 +769,7 @@ NotifyClamd clamd.conf
         const NUM_BYTES: usize = 1024 * 1024;
 
         let random_bytes: Vec<u8> = (0..NUM_BYTES).map(|_| rand::random::<u8>()).collect();
-        let mut clamd_client = ClamdClientBuilder::unix_socket(UNIX_SOCKET_PATH).build();
+        let clamd_client = ClamdClientBuilder::unix_socket(UNIX_SOCKET_PATH).build();
 
         clamd_client.scan_bytes(&random_bytes).await?;
         Ok(())
@@ -783,7 +783,7 @@ NotifyClamd clamd.conf
             .await?
             .bytes()
             .await?;
-        let mut clamd_client = ClamdClientBuilder::unix_socket(UNIX_SOCKET_PATH).build();
+        let clamd_client = ClamdClientBuilder::unix_socket(UNIX_SOCKET_PATH).build();
 
         let res = clamd_client.scan_bytes(&eicar_bytes).await?;
         match res {
@@ -799,7 +799,7 @@ NotifyClamd clamd.conf
     #[traced_test]
     async fn unix_socket_reload() -> eyre::Result<()> {
         setup_clamav();
-        let mut clamd_client = ClamdClientBuilder::unix_socket(UNIX_SOCKET_PATH).build();
+        let clamd_client = ClamdClientBuilder::unix_socket(UNIX_SOCKET_PATH).build();
 
         clamd_client.reload().await?;
         Ok(())
@@ -814,7 +814,7 @@ NotifyClamd clamd.conf
             .bytes()
             .await?;
 
-        let mut clamd_client = ClamdClientBuilder::tcp_socket(TCP_ADDRESS)?
+        let clamd_client = ClamdClientBuilder::tcp_socket(TCP_ADDRESS)?
             .keep_alive(true)
             .build();
         clamd_client.ping().await?;
@@ -839,7 +839,7 @@ NotifyClamd clamd.conf
     async fn multi_virus() -> eyre::Result<()> {
         setup_clamav();
         let file_bytes = String::from("exec('aW1wb3J0IHNvY2tldCxvcwpzbz1zb2NrZXQuc29ja2V0KHNvY2tldC5BRl')\n\nimport base64,sys;exec(base64.b64decode({2:str,3:lambda b:bytes()}))");
-        let mut clamd_client = ClamdClientBuilder::tcp_socket(TCP_ADDRESS)?.build();
+        let clamd_client = ClamdClientBuilder::tcp_socket(TCP_ADDRESS)?.build();
         let res = clamd_client.scan_bytes(file_bytes.as_bytes()).await?;
         match res {
             ScanResult::Benign => panic!("Malignent scan result expected"),
