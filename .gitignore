@@ -1,6 +1,8 @@
 Cargo.lock
 target/
 *.~undo-tree~
+# test installed
+*.pkg
 
 # clamd
 *.cvd
@@ -9,3 +11,7 @@ target/
 *.log
 clamd.conf
 freshclam.conf
+
+# ide
+.idea/
+.vscode
