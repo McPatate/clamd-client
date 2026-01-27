@@ -833,10 +833,7 @@ NotifyClamd clamd.conf
     #[traced_test]
     async fn tcp_eicar() -> eyre::Result<()> {
         setup_clamav();
-        let eicar_bytes = reqwest::get(EICAR_TEST_URL)
-            .await?
-            .bytes()
-            .await?;
+        let eicar_bytes = reqwest::get(EICAR_TEST_URL).await?.bytes().await?;
 
         let mut clamd_client = ClamdClientBuilder::tcp_socket(TCP_ADDRESS)?.build();
         let res = clamd_client.scan_bytes(&eicar_bytes).await?;
@@ -889,10 +886,7 @@ NotifyClamd clamd.conf
     #[traced_test]
     async fn unix_socket_eicar() -> eyre::Result<()> {
         setup_clamav();
-        let eicar_bytes = reqwest::get(EICAR_TEST_URL)
-            .await?
-            .bytes()
-            .await?;
+        let eicar_bytes = reqwest::get(EICAR_TEST_URL).await?.bytes().await?;
         let mut clamd_client = ClamdClientBuilder::unix_socket(UNIX_SOCKET_PATH).build();
 
         let res = clamd_client.scan_bytes(&eicar_bytes).await?;
@@ -919,10 +913,7 @@ NotifyClamd clamd.conf
     #[traced_test]
     async fn keep_alive() -> eyre::Result<()> {
         setup_clamav();
-        let eicar_bytes = reqwest::get(EICAR_TEST_URL)
-            .await?
-            .bytes()
-            .await?;
+        let eicar_bytes = reqwest::get(EICAR_TEST_URL).await?.bytes().await?;
 
         let mut clamd_client = ClamdClientBuilder::tcp_socket(TCP_ADDRESS)?
             .keep_alive(true)
@@ -990,10 +981,7 @@ NotifyClamd clamd.conf
     #[traced_test]
     async fn test_signature_exclusion() -> eyre::Result<()> {
         setup_clamav();
-        let eicar_bytes = reqwest::get(EICAR_TEST_URL)
-            .await?
-            .bytes()
-            .await?;
+        let eicar_bytes = reqwest::get(EICAR_TEST_URL).await?.bytes().await?;
         let mut clamd_client = ClamdClientBuilder::tcp_socket(TCP_ADDRESS)?
             .exclude_signature("Eicar-.*")? // Regex to match EICAR_TEST_SIGNATURE
             .build();
