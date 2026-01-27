@@ -662,7 +662,7 @@ mod tests {
     use tokio::io::AsyncWriteExt;
     use tracing_test::traced_test;
 
-    const CLAMAV_VERSION: &str = "1.0.0";
+    const CLAMAV_VERSION: &str = "1.4.0";
     const TCP_ADDRESS: &str = "127.0.0.1:3310";
     const UNIX_SOCKET_PATH: &str = "clamd.sock";
     static INIT: Once = Once::new();
@@ -724,7 +724,7 @@ NotifyClamd clamd.conf
                     Command::new("sudo")
                         .arg("installer")
                         .arg("-pkg")
-                        .arg("clamav-1.0.0.macos.universal.pkg")
+                        .arg(format!("clamav-{CLAMAV_VERSION}.macos.universal.pkg"))
                         .arg("-target")
                         .arg("/")
                         .status()
@@ -770,7 +770,7 @@ NotifyClamd clamd.conf
                     Command::new("sudo")
                         .arg("dpkg")
                         .arg("-i")
-                        .arg("clamav-1.0.0.linux.x86_64.deb")
+                        .arg("clamav-{CLAMAV_VERSION}.linux.x86_64.deb")
                         .status()
                         .unwrap();
                     Command::new("sudo")
