@@ -240,7 +240,7 @@ enum SocketTypeBuilder {
 /// # use eyre::Result;
 /// # async fn doc() -> eyre::Result<()> {
 /// let address = "127.0.0.1:3310";
-/// let mut clamd_client = ClamdClientBuilder::tcp_socket(address)?.chunk_size(4096).build();
+/// let clamd_client = ClamdClientBuilder::tcp_socket(address)?.chunk_size(4096).build();
 /// # Ok(())
 /// # }
 /// ```
@@ -261,7 +261,7 @@ impl ClamdClientBuilder {
     /// # async fn doc() -> eyre::Result<()> {
     /// let path = "/var/run/clamav/clamd.sock";
     /// // define placeholder types here that implement `ToSocketAddrs`
-    /// let mut clamd_client = ClamdClientBuilder::unix_socket(path).chunk_size(4096).build();
+    /// let clamd_client = ClamdClientBuilder::unix_socket(path).chunk_size(4096).build();
     /// # Ok(())
     /// # }
     pub fn unix_socket<P: AsRef<Path> + ?Sized>(path: &P) -> Self {
@@ -387,7 +387,7 @@ impl ScanResult {
 /// # use eyre::Result;
 /// # async fn doc() -> eyre::Result<()> {
 /// let address = "127.0.0.1:3310";
-/// let mut clamd_client = ClamdClientBuilder::tcp_socket(address)?.build();
+/// let clamd_client = ClamdClientBuilder::tcp_socket(address)?.build();
 /// clamd_client.ping().await?;
 /// # Ok(())
 /// # }
@@ -421,7 +421,7 @@ impl WrappedFramed {
 }
 
 impl ClamdClient {
-    async fn connect(&mut self) -> Result<WrappedFramed> {
+    async fn connect(&self) -> Result<WrappedFramed> {
         let codec = ClamdZeroDelimitedCodec::new();
         match &self.connection_type {
             ConnectionType::Oneshot => match &self.socket_type {
@@ -469,7 +469,7 @@ impl ClamdClient {
         }
     }
 
-    async fn close_connection(&mut self) -> Result<()> {
+    async fn close_connection(&self) -> Result<()> {
         match &self.connection_type {
             ConnectionType::Oneshot => Ok(()),
             ConnectionType::KeepAlive => {
@@ -484,7 +484,7 @@ impl ClamdClient {
 impl ClamdClient {
     /// Ping clamd. If it responds normally (with `PONG`) this function returns `Ok(())`, otherwise
     /// returns with error.
-    pub async fn ping(&mut self) -> Result<()> {
+    pub async fn ping(&self) -> Result<()> {
         let mut framed = self.connect().await?;
         let sock = framed.get_socket();
         sock.send(ClamdRequestMessage::Ping).await?;
@@ -502,7 +502,7 @@ impl ClamdClient {
     }
 
     /// Get `clamd` version string.
-    pub async fn version(&mut self) -> Result<String> {
+    pub async fn version(&self) -> Result<String> {
         let mut framed = self.connect().await?;
         let sock = framed.get_socket();
         sock.send(ClamdRequestMessage::Version).await?;
@@ -517,7 +517,7 @@ impl ClamdClient {
     }
 
     /// Reload `clamd`.
-    pub async fn reload(&mut self) -> Result<()> {
+    pub async fn reload(&self) -> Result<()> {
         let mut framed = self.connect().await?;
         let sock = framed.get_socket();
         sock.send(ClamdRequestMessage::Reload).await?;
@@ -537,7 +537,7 @@ impl ClamdClient {
     }
 
     /// Get `clamd` stats.
-    pub async fn stats(&mut self) -> Result<String> {
+    pub async fn stats(&self) -> Result<String> {
         let mut framed = self.connect().await?;
         let sock = framed.get_socket();
         sock.send(ClamdRequestMessage::Stats).await?;
@@ -556,7 +556,7 @@ impl ClamdClient {
     }
 
     /// Shutdown clamd. Careful: There is no way to start clamd again from this library.
-    pub async fn shutdown(mut self) -> Result<()> {
+    pub async fn shutdown(self) -> Result<()> {
         let mut framed = self.connect().await?;
         let sock = framed.get_socket();
         trace!("Sent shutdown request to clamd");
@@ -577,7 +577,7 @@ impl ClamdClient {
     /// [`ClamdError::ScanError`] with the scan result. See [`ClamdError`] for more
     /// information.
     pub async fn scan_reader<R: AsyncRead + AsyncReadExt + Unpin>(
-        &mut self,
+        &self,
         mut to_scan: R,
     ) -> Result<ScanResult> {
         let mut buf = BytesMut::with_capacity(self.chunk_size);
@@ -603,7 +603,7 @@ impl ClamdClient {
 
     /// Convienence method to scan a bytes slice. Wraps [`ClamdClient::scan_reader`], so see there
     /// for more information.
-    pub async fn scan_bytes(&mut self, to_scan: &[u8]) -> Result<ScanResult> {
+    pub async fn scan_bytes(&self, to_scan: &[u8]) -> Result<ScanResult> {
         let cursor = Cursor::new(to_scan);
         self.scan_reader(cursor).await
     }
@@ -611,19 +611,19 @@ impl ClamdClient {
     /// Convienence method to directly scan a file under the given
     /// path. This will read the file and stream it to clamd. Wraps
     /// [`ClamdClient::scan_reader`], so see there for more information.
-    pub async fn scan_file(&mut self, path_to_scan: impl AsRef<Path>) -> Result<ScanResult> {
+    pub async fn scan_file(&self, path_to_scan: impl AsRef<Path>) -> Result<ScanResult> {
         let reader = File::open(path_to_scan).await?;
         self.scan_reader(reader).await
     }
 
-    pub async fn end_session(&mut self) -> Result<()> {
+    pub async fn end_session(&self) -> Result<()> {
         let mut framed = self.connect().await?;
         let sock = framed.get_socket();
         sock.send(ClamdRequestMessage::EndSession).await?;
         Ok(())
     }
 
-    pub async fn all_match_scan(&mut self, path_to_scan: &impl AsRef<Path>) -> Result<ScanResult> {
+    pub async fn all_match_scan(&self, path_to_scan: &impl AsRef<Path>) -> Result<ScanResult> {
         let path = path_to_scan.as_ref().to_path_buf();
         if path.is_dir() {
             return Err(ClamdError::UnsupportedFeature);
@@ -639,7 +639,7 @@ impl ClamdClient {
         ScanResult::from_output(&res, &self.excluded_signatures)
     }
 
-    pub async fn multi_scan(&mut self, path_to_scan: &impl AsRef<Path>) -> Result<ScanResult> {
+    pub async fn multi_scan(&self, path_to_scan: &impl AsRef<Path>) -> Result<ScanResult> {
         let path = path_to_scan.as_ref().to_path_buf();
         if path.is_dir() {
             return Err(ClamdError::UnsupportedFeature);
@@ -806,7 +806,7 @@ NotifyClamd clamd.conf
     #[traced_test]
     async fn tcp_common_operations() -> eyre::Result<()> {
         setup_clamav();
-        let mut clamd_client = ClamdClientBuilder::tcp_socket(TCP_ADDRESS)?.build();
+        let clamd_client = ClamdClientBuilder::tcp_socket(TCP_ADDRESS)?.build();
         clamd_client.ping().await?;
         let version = clamd_client.version().await?;
         assert!(!version.is_empty());
@@ -823,7 +823,7 @@ NotifyClamd clamd.conf
 
         let random_bytes: Vec<u8> = (0..NUM_BYTES).map(|_| rand::random::<u8>()).collect();
 
-        let mut clamd_client = ClamdClientBuilder::tcp_socket(TCP_ADDRESS)?.build();
+        let clamd_client = ClamdClientBuilder::tcp_socket(TCP_ADDRESS)?.build();
         let result = clamd_client.scan_bytes(&random_bytes).await?;
         assert!(matches!(result, ScanResult::Benign));
         Ok(())
@@ -835,7 +835,7 @@ NotifyClamd clamd.conf
         setup_clamav();
         let eicar_bytes = reqwest::get(EICAR_TEST_URL).await?.bytes().await?;
 
-        let mut clamd_client = ClamdClientBuilder::tcp_socket(TCP_ADDRESS)?.build();
+        let clamd_client = ClamdClientBuilder::tcp_socket(TCP_ADDRESS)?.build();
         let res = clamd_client.scan_bytes(&eicar_bytes).await?;
         match res {
             ScanResult::Benign => panic!("Malignent scan result expected"),
@@ -850,7 +850,7 @@ NotifyClamd clamd.conf
     #[traced_test]
     async fn tcp_reload() -> eyre::Result<()> {
         setup_clamav();
-        let mut clamd_client = ClamdClientBuilder::tcp_socket(TCP_ADDRESS)?.build();
+        let clamd_client = ClamdClientBuilder::tcp_socket(TCP_ADDRESS)?.build();
         clamd_client.reload().await?;
         Ok(())
     }
@@ -859,7 +859,7 @@ NotifyClamd clamd.conf
     #[traced_test]
     async fn unix_socket_common_operations() -> eyre::Result<()> {
         setup_clamav();
-        let mut clamd_client = ClamdClientBuilder::unix_socket(UNIX_SOCKET_PATH).build();
+        let clamd_client = ClamdClientBuilder::unix_socket(UNIX_SOCKET_PATH).build();
         clamd_client.ping().await?;
         let version = clamd_client.version().await?;
         assert!(!version.is_empty());
@@ -875,7 +875,7 @@ NotifyClamd clamd.conf
         const NUM_BYTES: usize = 1024 * 1024;
 
         let random_bytes: Vec<u8> = (0..NUM_BYTES).map(|_| rand::random::<u8>()).collect();
-        let mut clamd_client = ClamdClientBuilder::unix_socket(UNIX_SOCKET_PATH).build();
+        let clamd_client = ClamdClientBuilder::unix_socket(UNIX_SOCKET_PATH).build();
 
         let result = clamd_client.scan_bytes(&random_bytes).await?;
         assert!(matches!(result, ScanResult::Benign));
@@ -887,7 +887,7 @@ NotifyClamd clamd.conf
     async fn unix_socket_eicar() -> eyre::Result<()> {
         setup_clamav();
         let eicar_bytes = reqwest::get(EICAR_TEST_URL).await?.bytes().await?;
-        let mut clamd_client = ClamdClientBuilder::unix_socket(UNIX_SOCKET_PATH).build();
+        let clamd_client = ClamdClientBuilder::unix_socket(UNIX_SOCKET_PATH).build();
 
         let res = clamd_client.scan_bytes(&eicar_bytes).await?;
         match res {
@@ -903,7 +903,7 @@ NotifyClamd clamd.conf
     #[traced_test]
     async fn unix_socket_reload() -> eyre::Result<()> {
         setup_clamav();
-        let mut clamd_client = ClamdClientBuilder::unix_socket(UNIX_SOCKET_PATH).build();
+        let clamd_client = ClamdClientBuilder::unix_socket(UNIX_SOCKET_PATH).build();
 
         clamd_client.reload().await?;
         Ok(())
@@ -915,7 +915,7 @@ NotifyClamd clamd.conf
         setup_clamav();
         let eicar_bytes = reqwest::get(EICAR_TEST_URL).await?.bytes().await?;
 
-        let mut clamd_client = ClamdClientBuilder::tcp_socket(TCP_ADDRESS)?
+        let clamd_client = ClamdClientBuilder::tcp_socket(TCP_ADDRESS)?
             .keep_alive(true)
             .build();
         clamd_client.ping().await?;
@@ -944,7 +944,7 @@ NotifyClamd clamd.conf
         let file_content = String::from("exec('aW1wb3J0IHNvY2tldCxvcwpzbz1zb2NrZXQuc29ja2V0KHNvY2tldC5BRl')\n\nimport base64,sys;exec(base64.b64decode({2:str,3:lambda b:bytes()}))");
         let mut file = File::create(&file_path).await?;
         file.write_all(file_content.as_bytes()).await?;
-        let mut clamd_client = ClamdClientBuilder::tcp_socket(TCP_ADDRESS)?.build();
+        let clamd_client = ClamdClientBuilder::tcp_socket(TCP_ADDRESS)?.build();
         let res = clamd_client.all_match_scan(&file_path).await?;
         match res {
             ScanResult::Benign => panic!("Malignent scan result expected"),
@@ -970,7 +970,7 @@ NotifyClamd clamd.conf
         let file_content = String::from("import somemodule; print(f'{somemodule.somemethod()')");
         let mut file = File::create(&file_path).await?;
         file.write_all(file_content.as_bytes()).await?;
-        let mut clamd_client = ClamdClientBuilder::tcp_socket(TCP_ADDRESS)?.build();
+        let clamd_client = ClamdClientBuilder::tcp_socket(TCP_ADDRESS)?.build();
         let res = clamd_client.all_match_scan(&file_path).await?;
         assert!(matches!(res, ScanResult::Benign));
         tokio::fs::remove_file(file_path).await?;
@@ -982,7 +982,7 @@ NotifyClamd clamd.conf
     async fn test_signature_exclusion() -> eyre::Result<()> {
         setup_clamav();
         let eicar_bytes = reqwest::get(EICAR_TEST_URL).await?.bytes().await?;
-        let mut clamd_client = ClamdClientBuilder::tcp_socket(TCP_ADDRESS)?
+        let clamd_client = ClamdClientBuilder::tcp_socket(TCP_ADDRESS)?
             .exclude_signature("Eicar-.*")? // Regex to match EICAR_TEST_SIGNATURE
             .build();
         let res = clamd_client.scan_bytes(&eicar_bytes).await?;
