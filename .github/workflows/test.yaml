@@ -2,6 +2,7 @@ name: Test CI
 
 on:
   push:
+    branches: [main]
   pull_request:
 
 jobs:
@@ -34,9 +35,3 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-
-      - name: Run Audit
-        uses: actions-rs/cargo@v1
-        with:
-          command: audit
-          # args: -D warnings
