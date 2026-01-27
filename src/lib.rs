@@ -773,7 +773,7 @@ NotifyClamd clamd.conf
                     Command::new("sudo")
                         .arg("dpkg")
                         .arg("-i")
-                        .arg("clamav-{CLAMAV_VERSION}.linux.x86_64.deb")
+                        .arg(format!("clamav-{CLAMAV_VERSION}.linux.x86_64.deb"))
                         .status()
                         .unwrap();
                     Command::new("sudo")
