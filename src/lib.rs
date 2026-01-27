@@ -335,6 +335,7 @@ impl ClamdClientBuilder {
     }
 }
 
+#[derive(Debug)]
 pub enum ScanResult {
     Benign,
     Malignent { infection_types: Vec<String> },
@@ -665,6 +666,8 @@ mod tests {
     const CLAMAV_VERSION: &str = "1.4.0";
     const TCP_ADDRESS: &str = "127.0.0.1:3310";
     const UNIX_SOCKET_PATH: &str = "clamd.sock";
+    const EICAR_TEST_URL: &str = "https://secure.eicar.org/eicar_com.zip";
+    const EICAR_TEST_SIGNATURE: &str = "Eicar-Test-Signature";
     static INIT: Once = Once::new();
 
     fn generate_config_files() {
@@ -830,7 +833,7 @@ NotifyClamd clamd.conf
     #[traced_test]
     async fn tcp_eicar() -> eyre::Result<()> {
         setup_clamav();
-        let eicar_bytes = reqwest::get("https://secure.eicar.org/eicarcom2.zip")
+        let eicar_bytes = reqwest::get(EICAR_TEST_URL)
             .await?
             .bytes()
             .await?;
@@ -840,7 +843,7 @@ NotifyClamd clamd.conf
         match res {
             ScanResult::Benign => panic!("Malignent scan result expected"),
             ScanResult::Malignent { infection_types } => {
-                assert_eq!(infection_types, vec!["Win.Test.EICAR_HDB-1".to_owned()])
+                assert_eq!(infection_types, vec![EICAR_TEST_SIGNATURE.to_owned()])
             }
         }
         Ok(())
@@ -886,7 +889,7 @@ NotifyClamd clamd.conf
     #[traced_test]
     async fn unix_socket_eicar() -> eyre::Result<()> {
         setup_clamav();
-        let eicar_bytes = reqwest::get("https://secure.eicar.org/eicarcom2.zip")
+        let eicar_bytes = reqwest::get(EICAR_TEST_URL)
             .await?
             .bytes()
             .await?;
@@ -896,7 +899,7 @@ NotifyClamd clamd.conf
         match res {
             ScanResult::Benign => panic!("Malignent scan result expected"),
             ScanResult::Malignent { infection_types } => {
-                assert_eq!(infection_types, vec!["Win.Test.EICAR_HDB-1".to_owned()])
+                assert_eq!(infection_types, vec![EICAR_TEST_SIGNATURE.to_owned()])
             }
         }
         Ok(())
@@ -916,7 +919,7 @@ NotifyClamd clamd.conf
     #[traced_test]
     async fn keep_alive() -> eyre::Result<()> {
         setup_clamav();
-        let eicar_bytes = reqwest::get("https://secure.eicar.org/eicarcom2.zip")
+        let eicar_bytes = reqwest::get(EICAR_TEST_URL)
             .await?
             .bytes()
             .await?;
@@ -934,7 +937,7 @@ NotifyClamd clamd.conf
         match res {
             ScanResult::Benign => panic!("Malignent scan result expected"),
             ScanResult::Malignent { infection_types } => {
-                assert_eq!(infection_types, vec!["Win.Test.EICAR_HDB-1".to_owned()])
+                assert_eq!(infection_types, vec![EICAR_TEST_SIGNATURE.to_owned()])
             }
         }
         clamd_client.end_session().await?;
@@ -987,12 +990,12 @@ NotifyClamd clamd.conf
     #[traced_test]
     async fn test_signature_exclusion() -> eyre::Result<()> {
         setup_clamav();
-        let eicar_bytes = reqwest::get("https://secure.eicar.org/eicarcom2.zip")
+        let eicar_bytes = reqwest::get(EICAR_TEST_URL)
             .await?
             .bytes()
             .await?;
         let mut clamd_client = ClamdClientBuilder::tcp_socket(TCP_ADDRESS)?
-            .exclude_signature("Win\\.*")?
+            .exclude_signature("Eicar-.*")? // Regex to match EICAR_TEST_SIGNATURE
             .build();
         let res = clamd_client.scan_bytes(&eicar_bytes).await?;
         assert!(matches!(res, ScanResult::Benign));
